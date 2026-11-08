@@ -1,0 +1,71 @@
+// =====================================================================
+// MEDIDAS DE POWER BI - RMN_DW
+// Como usarlo:
+// 1. Tener creada la tabla "Medidas" (Inicio > Especificar datos, una columna cualquiera).
+// 2. Ir a la Vista de consulta DAX (cuarto icono de la barra izquierda).
+// 3. Pegar TODO este archivo y apretar Ejecutar.
+// 4. Hacer clic en "Update model: Add all new measures" (aparece sobre DEFINE).
+// Las medidas quedan creadas en el modelo, todas juntas.
+// =====================================================================
+DEFINE
+
+// ---------------- TURNOS ----------------
+MEASURE Medidas[Turnos] = SUM('dw fact_turnos'[cantidad_turnos])
+MEASURE Medidas[Turnos Realizados] = CALCULATE([Turnos], 'dw fact_turnos'[estado_turno] = "Realizado")
+MEASURE Medidas[Turnos No Asistio] = CALCULATE([Turnos], 'dw fact_turnos'[estado_turno] = "No Asistio")
+MEASURE Medidas[Turnos Cancelados] = CALCULATE([Turnos], 'dw fact_turnos'[estado_turno] = "Cancelado")
+MEASURE Medidas[Turnos Futuros] = CALCULATE([Turnos], 'dw fact_turnos'[estado_turno] IN {"Programado", "Confirmado", "En Evaluacion"})
+MEASURE Medidas[% Cancelacion] = DIVIDE([Turnos Cancelados], [Turnos])
+MEASURE Medidas[% Inasistencia] = DIVIDE([Turnos No Asistio], [Turnos Realizados] + [Turnos No Asistio])
+MEASURE Medidas[Anticipacion Prom (dias)] = AVERAGE('dw fact_turnos'[dias_anticipacion])
+
+// ---------------- CHATBOT (SESIONES) ----------------
+MEASURE Medidas[Sesiones] = SUM('dw fact_sesiones'[cantidad_sesiones])
+MEASURE Medidas[Sesiones Finalizadas] = CALCULATE([Sesiones], 'dw fact_sesiones'[estado_sesion] = "Finalizada")
+MEASURE Medidas[Sesiones En Progreso] = CALCULATE([Sesiones], 'dw fact_sesiones'[estado_sesion] = "En_Progreso")
+MEASURE Medidas[% Finalizacion] = DIVIDE([Sesiones Finalizadas], [Sesiones])
+MEASURE Medidas[Duracion Prom (min)] = CALCULATE(AVERAGE('dw fact_sesiones'[duracion_minutos]), 'dw fact_sesiones'[estado_sesion] = "Finalizada")
+MEASURE Medidas[Sesiones con Alerta] = CALCULATE([Sesiones], 'dw fact_sesiones'[tuvo_alerta] = TRUE())
+MEASURE Medidas[% Sesiones con Alerta] = DIVIDE([Sesiones con Alerta], [Sesiones])
+MEASURE Medidas[Prot. Declaradas (sesiones)] = SUM('dw fact_sesiones'[cantidad_protesis_declaradas])
+
+MEASURE Medidas[Turnos con Sesion] = CALCULATE([Turnos], 'dw fact_turnos'[tuvo_sesion] = TRUE())
+MEASURE Medidas[Turnos sin Sesion] = CALCULATE([Turnos], 'dw fact_turnos'[tuvo_sesion] = FALSE())
+// Ajustar "RMN" si en 'dw dim_estudio'[modalidad] el valor se escribe distinto
+MEASURE Medidas[Turnos RMN] = CALCULATE([Turnos], 'dw dim_estudio'[modalidad] = "RMN")
+MEASURE Medidas[% Cobertura del Chat] = DIVIDE(CALCULATE([Turnos con Sesion], 'dw dim_estudio'[modalidad] = "RMN"), [Turnos RMN])
+
+MEASURE Medidas[% Cancelacion con Sesion] = CALCULATE([% Cancelacion], 'dw fact_turnos'[tuvo_sesion] = TRUE())
+MEASURE Medidas[% Cancelacion sin Sesion] = CALCULATE([% Cancelacion], 'dw fact_turnos'[tuvo_sesion] = FALSE())
+MEASURE Medidas[% Inasistencia con Sesion] = CALCULATE([% Inasistencia], 'dw fact_turnos'[tuvo_sesion] = TRUE())
+MEASURE Medidas[% Inasistencia sin Sesion] = CALCULATE([% Inasistencia], 'dw fact_turnos'[tuvo_sesion] = FALSE())
+
+// ---------------- DECLARACIONES Y ALERTAS ----------------
+MEASURE Medidas[Declaraciones] = COUNTROWS('dw dim_protesis_declarada')
+MEASURE Medidas[Declaraciones con Alerta] = DISTINCTCOUNT('dw fact_alertas_bioseguridad'[declaracion_id_origen])
+MEASURE Medidas[% Declaraciones con Alerta] = DIVIDE([Declaraciones con Alerta], [Declaraciones])
+
+MEASURE Medidas[Alertas] = SUM('dw fact_alertas_bioseguridad'[cantidad_alertas])
+MEASURE Medidas[Alertas Criticas] = CALCULATE([Alertas], 'dw fact_alertas_bioseguridad'[nivel_urgencia] = "Critica")
+MEASURE Medidas[Alertas Abiertas] = CALCULATE([Alertas], 'dw fact_alertas_bioseguridad'[estado_alerta] IN {"Disparada", "En Revision"})
+MEASURE Medidas[Alertas Resueltas] = CALCULATE([Alertas], 'dw fact_alertas_bioseguridad'[estado_alerta] = "Resuelta")
+
+MEASURE Medidas[Segundos hasta Alerta (prom)] = AVERAGE('dw fact_alertas_bioseguridad'[segundos_alerta])
+MEASURE Medidas[Segundos hasta Alerta (max)] = MAX('dw fact_alertas_bioseguridad'[segundos_alerta])
+MEASURE Medidas[% Alertas en <= 60 s] =
+    DIVIDE(
+        CALCULATE(COUNTROWS('dw fact_alertas_bioseguridad'), 'dw fact_alertas_bioseguridad'[segundos_alerta] <= 60),
+        COUNTROWS('dw fact_alertas_bioseguridad')
+    )
+MEASURE Medidas[Horas Resolucion Alerta (prom)] = AVERAGE('dw fact_alertas_bioseguridad'[horas_resolucion])
+
+// ---------------- EVALUACIONES ----------------
+MEASURE Medidas[Evaluaciones] = SUM('dw fact_evaluaciones_bioseguridad'[cantidad_evaluaciones])
+MEASURE Medidas[Evaluaciones Finalizadas] = CALCULATE([Evaluaciones], 'dw fact_evaluaciones_bioseguridad'[estado_evaluacion] = "Finalizada")
+MEASURE Medidas[Evaluaciones Pendientes] = CALCULATE([Evaluaciones], 'dw fact_evaluaciones_bioseguridad'[estado_evaluacion] IN {"Pendiente", "En Revision"})
+MEASURE Medidas[MR Unsafe] = CALCULATE([Evaluaciones], 'dw fact_evaluaciones_bioseguridad'[resultado_compatibilidad] = "MR Unsafe")
+MEASURE Medidas[Horas Evaluacion (prom)] = AVERAGE('dw fact_evaluaciones_bioseguridad'[horas_resolucion])
+MEASURE Medidas[% Evaluaciones Finalizadas] = DIVIDE([Evaluaciones Finalizadas], [Evaluaciones])
+
+// Consulta minima requerida por el editor (no crea nada en el modelo)
+EVALUATE ROW("Turnos", [Turnos], "Sesiones", [Sesiones], "Alertas", [Alertas], "Evaluaciones", [Evaluaciones])
